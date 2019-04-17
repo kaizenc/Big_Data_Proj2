@@ -1,28 +1,20 @@
 """SimpleApp.py"""
 import os
+import pyspark
 from pyspark.sql import SparkSession
 from pyspark.sql.functions import *
+from pyspark import SparkContext, SparkConf
 
-file_name = 'test_file.txt'
+if __name__ == "__main__":
+ 
+  # create Spark context with Spark configuration
+  conf = SparkConf().setAppName("Print Contents of RDD - Python")
+  sc = SparkContext(conf=conf)
 
-if __name__ == '__main__':
-    # Start reading a file on your system
-    cwd = os.getcwd() + '/'
-    logFile = cwd + file_name  # Should be some file on your system
-    spark = SparkSession.builder.appName("SimpleApp").getOrCreate()
-    textFile = spark.read.text(logFile).cache()
+  text = sc.textFile('test_file.txt')
+  for x in text.collect():
+      print(x)
 
-    # Count the lines with a's, count the lines with b's
-    numAs = textFile.filter(textFile.value.contains('a')).count()
-    numBs = textFile.filter(textFile.value.contains('b')).count()
-    print("Lines with a: %i, lines with b: %i" % (numAs, numBs))
-
-    # Return the size of the line with the most number of words
-    maxWords = textFile.select(size(split(textFile.value, "\s+")).name("numWords")).agg(max(col("numWords"))).collect()
-    print(maxWords)
-
-    # Example of a word count mapreduce flow; count each word, group and sort by count
-    wordCounts = textFile.select(explode(split(textFile.value, "\s+")).alias("word")).groupBy("word").count().orderBy("count").collect()
-    print(wordCounts)
-
-    spark.stop()
+  pairs = text.map(lambda x: (x.split(" ")[0], (x.split(" ")[1:])))
+  for y in pairs.collect():
+      print(y)
