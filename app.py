@@ -15,6 +15,15 @@ if __name__ == "__main__":
   for x in text.collect():
       print(x)
 
-  pairs = text.map(lambda x: (x.split(" ")[0], (x.split(" ")[1:])))
-  for y in pairs.collect():
+  doc_to_line = text.map(lambda x: (x.split(" ")[0], (x.split(" ")[1:])))
+  for y in doc_to_line.collect():
       print(y)
+  
+  pairs = doc_to_line.flatMap(lambda kv: ((kv[0], x) for x in (kv[1])))
+  for z in pairs.collect():
+      print(z)
+
+  individual_occurence = pairs.map(lambda kv: (kv[0], (kv[1],1)))
+  for a in individual_occurence.collect():
+      print(a)
+  
