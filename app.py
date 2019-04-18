@@ -6,7 +6,7 @@ from pyspark.sql import SparkSession
 from pyspark.sql.functions import *
 from pyspark import SparkContext, SparkConf
 
-from math import log
+from math import log10
 
 os.environ['PYSPARK_PYTHON'] = '/usr/local/bin/python3'
 
@@ -39,7 +39,7 @@ if __name__ == "__main__":
     
     flip = pairs_with_tf.map(lambda x: (x[1][0], [(x[0],) + x[1][1:]])).reduceByKey(lambda x, y: x+y)
     # Current state: (word, [doc, word_appearance, doc_length, tf])
-    pairs_with_idf = flip.map(lambda x: ((x[0], (log(totalDocs/len(x[1])))), x[1]))
+    pairs_with_idf = flip.map(lambda x: ((x[0], (log10(totalDocs/len(x[1])))), x[1]))
 
     pre_similarity = pairs_with_idf.map(lambda kv: (kv[0][0], [(int(x[0][3:]), x[3]*kv[0][1]) for x in kv[1]]))\
         .map(lambda x: (x[0], vectorize(totalDocs, x[1])))
