@@ -6,9 +6,20 @@ from pyspark.sql import SparkSession
 from pyspark.sql.functions import *
 from pyspark import SparkContext, SparkConf
 
-from math import log10
+from math import log10, sqrt
 
 os.environ['PYSPARK_PYTHON'] = '/usr/local/bin/python3'
+
+def similarity(arr1, arr2):
+    numerator = 0
+    sqrt1 = 0
+    sqrt2 = 0
+    for i in range(len(arr1)):
+        numerator += arr1[i]*arr2[i]
+        sqrt1 += arr1[i]**2
+        sqrt2 += arr2[i]**2
+    denominator = sqrt(sqrt1) * sqrt(sqrt2)
+    return numerator/denominator
 
 def vectorize(total, arr):
     res = [0 for i in range(total)]
