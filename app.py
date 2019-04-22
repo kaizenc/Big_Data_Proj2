@@ -20,6 +20,18 @@ def similarity(arr1, arr2):
     denominator = sqrt(sqrt1) * sqrt(sqrt2)
     return numerator / denominator
 
+def single_numerator(arr):
+    term_numerator = 0
+    for i in range(len(arr)):
+        term_numerator += arr[i]
+    return term_numerator
+
+def single_denominator(arr):
+    term_denominator = 0
+    for i in range(len(arr)):
+        term_denominator += arr[i]**2
+    return term_denominator
+
 
 def vectorize(total, arr):
     res = [0 for i in range(total)]
@@ -57,6 +69,17 @@ if __name__ == "__main__":
 
     rdd1 = pairs_with_idf.map(lambda kv: (kv[0][0], [(int(x[0][3:]), x[3] * kv[0][1]) for x in kv[1]]))\
         .map(lambda x: (x[0], vectorize(totalDocs, x[1])))
+
+    similarity_numerator = rdd1.map(lambda x: (x[0], single_numerator(x[1])))
+
+    similarity_denominator = similarity_numerator.map(lambda x: (x[0], sqrt(x[1]**2)))
+
+    for x in similarity_denominator.collect():
+        print(x)
+
+    query_term = input("What is your query term? ")
+    print(query_term)
+    
 
     # l = list(itertools.combinations(rdd1.toLocalIterator(),2))
     # rdd2 = sc.parallelize(l)
