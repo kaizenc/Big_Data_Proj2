@@ -1,10 +1,12 @@
 #!/usr/local/bin/python3
 """SimpleApp.py"""
 import os
+import time
 from pyspark.sql.functions import *
 from pyspark import SparkContext, SparkConf
 
 from math import log10, sqrt
+import itertools
 
 os.environ['PYSPARK_PYTHON'] = '/usr/local/bin/python3'
 
@@ -13,24 +15,17 @@ def similarity(arr1, arr2):
     numerator = 0
     sqrt1 = 0
     sqrt2 = 0
-    for i in range(len(arr1)):
-        numerator += arr1[i] * arr2[i]
-        sqrt1 += arr1[i]**2
-        sqrt2 += arr2[i]**2
-    denominator = sqrt(sqrt1) * sqrt(sqrt2)
-    return numerator / denominator
-
-def single_numerator(arr):
-    term_numerator = 0
-    for i in range(len(arr)):
-        term_numerator += arr[i]
-    return term_numerator
-
-def single_denominator(arr):
-    term_denominator = 0
-    for i in range(len(arr)):
-        term_denominator += arr[i]**2
-    return term_denominator
+    for i, _ in enumerate(arr1):
+        if arr1[i] != arr2[i] and arr1[i]*arr2[i] != 0:
+            for i, _ in enumerate(arr1):
+                numerator += (arr1[i] * arr2[i])
+                sqrt1 += arr1[i]**2
+                sqrt2 += arr2[i]**2
+            denominator = sqrt(sqrt1) * sqrt(sqrt2)
+            if denominator == 0:
+                return 0
+            return numerator / denominator
+    return 0
 
 
 def vectorize(total, arr):
@@ -39,6 +34,13 @@ def vectorize(total, arr):
         res[x[0] - 1] = x[1]
     return res
 
+def generate_pairs(kv):
+    pairs = []
+    words = kv[1]
+    for i, x in enumerate(words):
+        for j in range(i+1, len(words)):
+            pairs.append((words[i], words[j]))
+    return pairs
 
 if __name__ == "__main__":
 
@@ -47,7 +49,7 @@ if __name__ == "__main__":
     sc = SparkContext(conf=conf)
 
     # collect textfile, turn it into an RDD
-    text = sc.textFile('testdata.txt')
+    text = sc.textFile('test_file.txt')
     totalDocs = text.count()
     # split up the words per doc
     doc_to_line = text.map(lambda x: (x.split(" ")[0], (x.split(" ")[1:])))
@@ -68,17 +70,11 @@ if __name__ == "__main__":
     pairs_with_idf = flip.map(lambda x: ((x[0], (log10(totalDocs / len(x[1])))), x[1]))
 
     rdd1 = pairs_with_idf.map(lambda kv: (kv[0][0], [(int(x[0][3:]), x[3] * kv[0][1]) for x in kv[1]]))\
-        .map(lambda x: (x[0], vectorize(totalDocs, x[1])))
+        .map(lambda x: (x[0], vectorize(totalDocs, x[1]))).sortByKey()
 
-    similarity_numerator = rdd1.map(lambda x: (x[0], single_numerator(x[1])))
-
-    similarity_denominator = similarity_numerator.map(lambda x: (x[0], sqrt(x[1]**2)))
-
-    for x in similarity_denominator.collect():
-        print(x)
-
-    query_term = input("What is your query term? ")
-    print(query_term)
+    rdd2 = rdd1.map(lambda x: (0, [x])).reduceByKey(lambda x, y: x + y).flatMap(generate_pairs)\
+        .map(lambda x: ( similarity(x[0][1], x[1][1]), (x[0][0], x[1][0]) )).sortByKey(ascending=False)
+    print(rdd2.take(10))
     
 
     # l = list(itertools.combinations(rdd1.toLocalIterator(),2))
