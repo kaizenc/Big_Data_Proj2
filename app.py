@@ -54,33 +54,40 @@ if __name__ == "__main__":
     # split up the words per doc
     doc_to_line = text.map(lambda x: (x.split(" ")[0], (x.split(" ")[1:])))
     # add document word count to each document
-    doc_to_line2 = doc_to_line.map(lambda kv: ((kv[0], len(kv[1])), kv[1]))
+    # Tuple: ( (doc1, words_in_doc), [word1, word2, word3, ...] )
+    doc_to_line_word_count = doc_to_line.map(lambda kv: ((kv[0], len(kv[1])), kv[1]))
 
-    # create doc/word pairs and count
-    pairs = doc_to_line2\
-        .flatMap(lambda kv: (((kv[0], x), 1) for x in (kv[1])))\
-        .reduceByKey(lambda x, y: x + y)
-    # at this stage: ((doc, length), word), word_count
-    new_pairs = pairs.map(lambda kv: (kv[0][0][0], (kv[0][1], kv[1], kv[0][0][1])))
-    pairs_with_tf = new_pairs.map(lambda x: (x[0], x[1] + ((x[1][1] / x[1][2]),)))
+    # create doc/word tuples, including the document word count and a "1" to serve as a word count
+    # Tuple: ( (doc1, words_in_doc, word1), 1 )
+    doc_word_pairs_init = doc_to_line_word_count.flatMap(lambda kv: (((kv[0], x), 1) for x in (kv[1])))
+    # Reduce by adding the 1s to get the number of appearances for a word per document
+    # Tuple: ( (doc1, words_in_doc, word1), word_frequency )
+    doc_word_pairs = doc_word_pairs_init.reduceByKey(lambda x, y: x + y)
+    # Re-map for clarity and to calculate tf
+    # Tuple: ( doc1, (word1, words_in_doc, word_frequency) )
+    pairs_with_tf_init = doc_word_pairs.map(lambda kv: (kv[0][0][0], (kv[0][1], kv[1], kv[0][0][1])))
+    # Calculate tf
+    # Tuple: ( doc1, (word1, words_in_doc, word_frequency, tf) )
+    pairs_with_tf = pairs_with_tf_init.map(lambda x: (x[0], x[1] + ((x[1][1] / x[1][2]),)))
 
-    flip = pairs_with_tf.map(lambda x: (x[1][0], [(x[0],) + x[1][1:]]))\
-        .reduceByKey(lambda x, y: x + y)
-    # Current state: (word, [doc, word_appearance, doc_length, tf])
-    pairs_with_idf = flip.map(lambda x: ((x[0], (log10(totalDocs / len(x[1])))), x[1]))
+    # Re-map to prepare for idf calculation, also turns the value into an array for reduction
+    # Tuple: ( word1, [(doc1, words_in_doc, word_frequency, tf)] )
+    idf_init = pairs_with_tf.map(lambda x: (x[1][0], [(x[0],) + x[1][1:]]))
+    # Reduce by concatenating all the arrays
+    # Tuple: ( word1, [(doc1 ... ), (doc2 ... )] )
+    idf_init_2 = idf_init.reduceByKey(lambda x, y: x + y)
+    # Calculate idf
+    # Tuple: ( (word1, idf), [(doc1 ... ), (doc2 ... )] )
+    pairs_with_idf = idf_init_2.map(lambda x: ((x[0], (log10(totalDocs / len(x[1])))), x[1]))
 
-    rdd1 = pairs_with_idf.map(lambda kv: (kv[0][0], [(int(x[0][3:]), x[3] * kv[0][1]) for x in kv[1]]))\
-        .map(lambda x: (x[0], vectorize(totalDocs, x[1]))).sortByKey()
+    # Calculate tf*idf for each word/doc pair
+    # Also strip the characters "doc" from each appearance and convert it to an int
+    # Tuple: ( word1, [(1, tf*idf), (2, tf*idf)] )
+    tf_idf = pairs_with_idf.map(lambda kv: (kv[0][0], [(int(x[0][3:]), x[3] * kv[0][1]) for x in kv[1]]))
+    # Convert each kv pair into a (word, vector) pair
+    # Tuple: ( word1, [x, y, z, ... ] )
+    # Note: Each x, y, z corresponds to a tf*idf value for that word per document
+    vecotrized = tf_idf.map(lambda x: (x[0], vectorize(totalDocs, x[1]))).sortByKey()
 
-    rdd2 = rdd1.map(lambda x: (0, [x])).reduceByKey(lambda x, y: x + y).flatMap(generate_pairs)\
+    rdd3 = rdd2.map(lambda x: (0, [x])).reduceByKey(lambda x, y: x + y).flatMap(generate_pairs)\
         .map(lambda x: ( similarity(x[0][1], x[1][1]), (x[0][0], x[1][0]) )).sortByKey(ascending=False)
-    print(rdd2.take(10))
-    
-
-    # l = list(itertools.combinations(rdd1.toLocalIterator(),2))
-    # rdd2 = sc.parallelize(l)
-    # final = rdd2.map(lambda x: (similarity(x[0][1], x[1][1], (x[0][0], x[1][0]))))
-    # for x, i in enumerate(final.sortByKey(ascending=False).collect()):
-    #     print(i)
-    #     if x == 10:
-    #         break
