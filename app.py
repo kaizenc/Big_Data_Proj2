@@ -2,6 +2,7 @@
 """SimpleApp.py"""
 import os
 import time
+import argparse
 from pyspark.sql.functions import *
 from pyspark import SparkContext, SparkConf
 
@@ -12,15 +13,16 @@ os.environ['PYSPARK_PYTHON'] = '/usr/local/bin/python3'
 
 
 def similarity(arr1, arr2):
+    # Similarity calculation given two vectors
     numerator = 0
     sqrt1 = 0
     sqrt2 = 0
     for i, _ in enumerate(arr1):
         if arr1[i] != arr2[i] and arr1[i]*arr2[i] != 0:
-            for i, _ in enumerate(arr1):
-                numerator += (arr1[i] * arr2[i])
-                sqrt1 += arr1[i]**2
-                sqrt2 += arr2[i]**2
+            for j, _ in enumerate(arr1):
+                numerator += (arr1[j] * arr2[j])
+                sqrt1 += arr1[j]**2
+                sqrt2 += arr2[j]**2
             denominator = sqrt(sqrt1) * sqrt(sqrt2)
             if denominator == 0:
                 return 0
@@ -29,12 +31,16 @@ def similarity(arr1, arr2):
 
 
 def vectorize(total, arr):
+    # Creates a vector out of tuples based on the first item of the tuple
+    # e.g. total = 4 and arr = [(2, 2), (3, 4)]
+    #      would return [0, 2, 4, 0]
     res = [0 for i in range(total)]
     for x in arr:
         res[x[0] - 1] = x[1]
     return res
 
 def generate_pairs(kv):
+    # Generates every possible combination of pairs
     pairs = []
     words = kv[1]
     for i, x in enumerate(words):
@@ -43,13 +49,23 @@ def generate_pairs(kv):
     return pairs
 
 if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description='Big Data Project 2')
+    parser.add_argument('-f', '--filename', type=str,
+                    help='Name of text file to process')
+    args = parser.parse_args()
+    filename = ''
+    if args.filename:
+        filename = args.filename
+    else:
+        filename = 'test_file.txt'
 
     # create Spark context with Spark configuration
-    conf = SparkConf().setAppName("Big Data Project 2")
+    conf = SparkConf().setAppName('Big Data Project 2')
     sc = SparkContext(conf=conf)
 
     # collect textfile, turn it into an RDD
-    text = sc.textFile('test_file.txt')
+    text = sc.textFile(filename)
+    # note total number of docs; used for calculation later
     totalDocs = text.count()
     # split up the words per doc
     doc_to_line = text.map(lambda x: (x.split(" ")[0], (x.split(" ")[1:])))
@@ -87,7 +103,9 @@ if __name__ == "__main__":
     # Convert each kv pair into a (word, vector) pair
     # Tuple: ( word1, [x, y, z, ... ] )
     # Note: Each x, y, z corresponds to a tf*idf value for that word per document
-    vecotrized = tf_idf.map(lambda x: (x[0], vectorize(totalDocs, x[1]))).sortByKey()
+    vectorized = tf_idf.map(lambda x: (x[0], vectorize(totalDocs, x[1]))).sortByKey()
 
-    rdd3 = rdd2.map(lambda x: (0, [x])).reduceByKey(lambda x, y: x + y).flatMap(generate_pairs)\
-        .map(lambda x: ( similarity(x[0][1], x[1][1]), (x[0][0], x[1][0]) )).sortByKey(ascending=False)
+    word_word_pairs = vectorized.map(lambda x: (0, [x])).reduceByKey(lambda x, y: x + y).flatMap(generate_pairs)
+    pairs_w_similarity = word_word_pairs.map(lambda x: ( similarity(x[0][1], x[1][1]), (x[0][0], x[1][0]) )) \
+        .sortByKey(ascending=False)
+    print(pairs_w_similarity.take(10))
