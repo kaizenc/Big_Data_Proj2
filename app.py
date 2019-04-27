@@ -1,5 +1,4 @@
 #!/usr/local/bin/python3
-"""SimpleApp.py"""
 import os
 import argparse
 from pyspark import SparkContext, SparkConf
@@ -9,15 +8,15 @@ import re
 
 os.environ['PYSPARK_PYTHON'] = '/usr/local/bin/python3'
 
-
 def similarity(arr1, arr2):
     # Similarity calculation given two vectors
     numerator = 0
     sqrt1 = 0
     sqrt2 = 0
     for i, _ in enumerate(arr1):
+        # Skips calculations on combinations that produce a numerator of 0
         if arr1[i] != arr2[i] and arr1[i] * arr2[i] != 0:
-            for j, _ in enumerate(arr1):
+            for j in range(i, len(arr1)):
                 numerator += (arr1[j] * arr2[j])
                 sqrt1 += arr1[j]**2
                 sqrt2 += arr2[j]**2
@@ -105,7 +104,7 @@ if __name__ == "__main__":
     # Note: Each x, y, z corresponds to a tf*idf value for that word per document
     vectorized = tf_idf.map(lambda x: (x[0], vectorize(totalDocs, x[1]))).sortByKey()
 
-    # Filter out expressions that don't match gene_xyz_gene
+    # Filter out expressions that don't match 'gene_xyz_gene'
     filtered = vectorized.filter(lambda x: re.match('^gene_.*_gene$', x[0]))
 
     # Generate the word and word pairs
@@ -115,4 +114,4 @@ if __name__ == "__main__":
     # Tuple: ( similarity, (word1, word2) )
     pairs_w_similarity = word_word_pairs.map(lambda x: (similarity(x[0][1], x[1][1]), (x[0][0], x[1][0]))) \
         .sortByKey(ascending=False)
-    print(pairs_w_similarity.take(10))
+    print(pairs_w_similarity.take(5))
