@@ -1,13 +1,11 @@
 #!/usr/local/bin/python3
 """SimpleApp.py"""
 import os
-import time
 import argparse
-from pyspark.sql.functions import *
 from pyspark import SparkContext, SparkConf
 
 from math import log10, sqrt
-import itertools
+import re
 
 os.environ['PYSPARK_PYTHON'] = '/usr/local/bin/python3'
 
@@ -18,7 +16,7 @@ def similarity(arr1, arr2):
     sqrt1 = 0
     sqrt2 = 0
     for i, _ in enumerate(arr1):
-        if arr1[i] != arr2[i] and arr1[i]*arr2[i] != 0:
+        if arr1[i] != arr2[i] and arr1[i] * arr2[i] != 0:
             for j, _ in enumerate(arr1):
                 numerator += (arr1[j] * arr2[j])
                 sqrt1 += arr1[j]**2
@@ -39,19 +37,21 @@ def vectorize(total, arr):
         res[x[0] - 1] = x[1]
     return res
 
+
 def generate_pairs(kv):
     # Generates every possible combination of pairs
     pairs = []
     words = kv[1]
     for i, x in enumerate(words):
-        for j in range(i+1, len(words)):
+        for j in range(i + 1, len(words)):
             pairs.append((words[i], words[j]))
     return pairs
+
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Big Data Project 2')
     parser.add_argument('-f', '--filename', type=str,
-                    help='Name of text file to process')
+                        help='Name of text file to process')
     args = parser.parse_args()
     filename = ''
     if args.filename:
@@ -105,7 +105,14 @@ if __name__ == "__main__":
     # Note: Each x, y, z corresponds to a tf*idf value for that word per document
     vectorized = tf_idf.map(lambda x: (x[0], vectorize(totalDocs, x[1]))).sortByKey()
 
-    word_word_pairs = vectorized.map(lambda x: (0, [x])).reduceByKey(lambda x, y: x + y).flatMap(generate_pairs)
-    pairs_w_similarity = word_word_pairs.map(lambda x: ( similarity(x[0][1], x[1][1]), (x[0][0], x[1][0]) )) \
+    # Filter out expressions that don't match gene_xyz_gene
+    filtered = vectorized.filter(lambda x: re.match('^gene_.*_gene$', x[0]))
+
+    # Generate the word and word pairs
+    # Tuple: ( (word1, [x, y, z, ... ]), (word2, [x, y, z, ... ]) )
+    word_word_pairs = filtered.map(lambda x: (0, [x])).reduceByKey(lambda x, y: x + y).flatMap(generate_pairs)
+    # Calculate similarity and sort by similarity
+    # Tuple: ( similarity, (word1, word2) )
+    pairs_w_similarity = word_word_pairs.map(lambda x: (similarity(x[0][1], x[1][1]), (x[0][0], x[1][0]))) \
         .sortByKey(ascending=False)
     print(pairs_w_similarity.take(10))
